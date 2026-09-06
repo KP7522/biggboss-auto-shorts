@@ -1,19 +1,20 @@
 import os
 import asyncio
-import requests
 import json
 import subprocess
+import requests
+from google import genai
 import edge_tts
-from PIL import Image, ImageDraw
+from PIL import Image
 
-# 1. GENERATE TELUGU SCRIPT VIA GEMINI REST API
+# 1. GENERATE TELUGU SCRIPT USING OFFICIAL GOOGLE GENAI SDK
 def generate_script_and_keywords():
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         raise ValueError("GEMINI_API_KEY secret is missing in GitHub Settings!")
 
-    # Using valid gemini-1.5-flash model endpoint
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    # Official SDK initialization
+    client = genai.Client(api_key=api_key)
     
     prompt = """
     You are a viral Telugu Bigg Boss reviewer. Write a 30-second high-energy dramatic commentary in Telugu script format for a YouTube Short / Reel.
@@ -27,19 +28,13 @@ def generate_script_and_keywords():
     "keywords": ["List", "of", "3", "English", "search", "keywords", "for", "images"]
     """
     
-    headers = {"Content-Type": "application/json"}
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"response_mime_type": "application/json"}
-    }
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt,
+        config={"response_mime_type": "application/json"}
+    )
     
-    res = requests.post(url, headers=headers, json=payload, timeout=30)
-    res.raise_for_status()
-    
-    result = res.json()
-    text_response = result['candidates'][0]['content']['parts'][0]['text']
-    data = json.loads(text_response)
-    
+    data = json.loads(response.text)
     return data["script"], data["keywords"]
 
 # 2. GENERATE TELUGU VOICE
@@ -47,7 +42,7 @@ async def generate_voiceover(text, output_path="voiceover.mp3"):
     communicate = edge_tts.Communicate(text, "te-IN-MohanNeural")
     await communicate.save(output_path)
 
-# 3. DOWNLOAD & PROCESS SAFE IMAGES
+# 3. PREPARE SAFE IMAGES
 def download_images(keywords, output_dir="safe_images"):
     os.makedirs(output_dir, exist_ok=True)
     processed_files = []
@@ -64,7 +59,8 @@ def download_images(keywords, output_dir="safe_images"):
                     f.write(res.content)
                 img = Image.open("temp.jpg").transpose(Image.FLIP_LEFT_RIGHT).resize((1080, 1920))
                 img.save(safe_path)
-                os.remove("temp.jpg")
+                if os.path.exists("temp.jpg"):
+                    os.remove("temp.jpg")
             else:
                 img = Image.new("RGB", (1080, 1920), color=(20, 20, 30))
                 img.save(safe_path)
