@@ -3,17 +3,18 @@ import asyncio
 import json
 import subprocess
 import requests
-from google import genai
+import google.generativeai as genai
 import edge_tts
 from PIL import Image
 
-# 1. GENERATE TELUGU SCRIPT USING OFFICIAL GOOGLE GENAI SDK
+# 1. GENERATE TELUGU SCRIPT
 def generate_script_and_keywords():
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         raise ValueError("GEMINI_API_KEY secret is missing in GitHub Settings!")
 
-    client = genai.Client(api_key=api_key)
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel("gemini-1.5-flash")
     
     prompt = """
     You are a viral Telugu Bigg Boss reviewer. Write a 30-second high-energy dramatic commentary in Telugu script format for a YouTube Short / Reel.
@@ -27,11 +28,9 @@ def generate_script_and_keywords():
     "keywords": ["List", "of", "3", "English", "search", "keywords", "for", "images"]
     """
     
-    # Updated model string to gemini-1.5-flash as explicitly requested by Google API error
-    response = client.models.generate_content(
-        model="gemini-1.5-flash",
-        contents=prompt,
-        config={"response_mime_type": "application/json"}
+    response = model.generate_content(
+        prompt,
+        generation_config={"response_mime_type": "application/json"}
     )
     
     data = json.loads(response.text)
