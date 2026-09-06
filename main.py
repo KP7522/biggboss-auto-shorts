@@ -2,20 +2,30 @@ import os
 import asyncio
 import subprocess
 import requests
-import random
+import re
 import edge_tts
 from PIL import Image, ImageDraw
 
-# 1. DRAMATIC TELUGU SCRIPT TEMPLATES (NO API NEEDED)
-TELUGU_SCRIPTS = [
-    "Arey rey rey! Ee vaaram Bigg Boss house lo jargindi choosthe mee mind blank aipothundi! Evaru oohinchani twist! House lo game completely maaripoyindi. Danger zone lo unna contestant evaro telusa? Instant updates kosam Subscribe cheskondi!",
-    "Bigg Boss house lo eeroju jarigina godava mamulugaledu! Housemates andaru rendu vargaalu ga maripoyaru. Nomination list lo pedda shocker ready ga undi. Ee vaaram evaru evict avtharo comment section lo cheppandi!",
-    "House lo oka vaipu master plan, inko vaipu revenge game! Ee vaaram nominations lo evaru danger zone lo unnaro telusthe shock avtharu! Audience ga mee vote evarki vesthunnaro kinda comment cheyandi. Subscribe for daily updates!"
-]
-
-def get_script():
-    # Randomly picks a high-energy Telugu commentary script
-    return random.choice(TELUGU_SCRIPTS)
+# 1. FETCH LIVE TELUGU BIGG BOSS UPDATES FROM THE WEB
+def get_live_script():
+    try:
+        # Fetch live news snippets about Bigg Boss Telugu
+        headers = {"User-Agent": "Mozilla/5.0"}
+        res = requests.get("https://news.google.com/rss/search?q=Bigg+Boss+Telugu&hl=te&gl=IN&ceid=IN:te", headers=headers, timeout=10)
+        
+        # Extract Telugu text headlines from RSS feed
+        titles = re.findall(r'<title>(.*?)</title>', res.text)
+        valid_titles = [t for t in titles if "Bigg Boss" in t or "బిగ్ బాస్" in t]
+        
+        if valid_titles:
+            headline = valid_titles[0].split("-")[0].strip()
+            script = f"Bigg Boss Telugu latest updates! {headline}. Ee vaaram house lo em jaragabothundho telusukovadaniki channel ki Subscribe cheskondi!"
+            return script
+    except Exception as e:
+        print(f"Live fetch fallback: {e}")
+        
+    # Fallback script if web fetch fails
+    return "Arey rey rey! Ee vaaram Bigg Boss house lo jargindi choosthe mee mind blank aipothundi! Evaru oohinchani twist! Instant updates kosam Subscribe cheskondi!"
 
 # 2. GENERATE TELUGU VOICE
 async def generate_voiceover(text, output_path="voiceover.mp3"):
@@ -52,14 +62,17 @@ def download_images(output_dir="safe_images"):
         
     return processed_files
 
-# 4. RENDER VIDEO WITH FFMPEG
+# 4. RENDER UNIVERSAL MP4 (FIXES HEVC / PLAYER COMPATIBILITY)
 def render_video():
     cmd = [
         "ffmpeg", "-y",
         "-loop", "1", "-framerate", "1/5", "-i", "safe_images/frame_%03d.jpg",
         "-i", "voiceover.mp3",
-        "-c:v", "libx264", "-tune", "stillimage", "-c:a", "aac", "-b:a", "192k",
-        "-pix_fmt", "yuv420p",
+        "-c:v", "libx264",
+        "-profile:v", "main",      # Forces standard universal H.264 profile
+        "-pix_fmt", "yuv420p",      # Standard color format compatible with all free media players
+        "-c:a", "aac",
+        "-b:a", "192k",
         "-shortest",
         "final_short.mp4"
     ]
@@ -67,9 +80,9 @@ def render_video():
 
 # MAIN PIPELINE
 async def main():
-    print("Step 1: Fetching Telugu Script...")
-    script = get_script()
-    print(f"Script: {script[:40]}...")
+    print("Step 1: Fetching Live Telugu Bigg Boss News...")
+    script = get_live_script()
+    print(f"Script: {script}")
     
     print("Step 2: Generating Telugu Audio Voiceover...")
     await generate_voiceover(script)
@@ -77,9 +90,9 @@ async def main():
     print("Step 3: Fetching Images...")
     download_images()
     
-    print("Step 4: Rendering Video with FFmpeg...")
+    print("Step 4: Rendering Universal MP4 Video...")
     render_video()
-    print("SUCCESS: Video created!")
+    print("SUCCESS: Standard MP4 Video created!")
 
 if __name__ == "__main__":
     asyncio.run(main())
