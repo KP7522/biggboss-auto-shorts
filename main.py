@@ -1,44 +1,44 @@
 import os
-import glob
 import asyncio
 import requests
 import json
-from google import genai
-from PIL import Image, ImageDraw
+import subprocess
 import edge_tts
+from PIL import Image, ImageDraw
 
-# Safe imports for both MoviePy v1.x and v2.x
-try:
-    from moviepy.editor import AudioFileClip, ImageSequenceClip
-except ImportError:
-    from moviepy.audio.io.AudioFileClip import AudioFileClip
-    from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
-
-# 1. GENERATE TELUGU SCRIPT
+# 1. GENERATE TELUGU SCRIPT VIA GEMINI REST API (No SDK version issues!)
 def generate_script_and_keywords():
     api_key = os.environ.get("GEMINI_API_KEY")
-    client = genai.Client(api_key=api_key) if api_key else genai.Client()
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY secret is missing in GitHub Settings!")
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
     
     prompt = """
-    You are a viral Telugu Bigg Boss reviewer. Write a 45-second high-energy dramatic commentary in Telugu script format for a YouTube Short / Reel.
+    You are a viral Telugu Bigg Boss reviewer. Write a 30-second high-energy dramatic commentary in Telugu script format for a YouTube Short / Reel.
     Structure:
     1. Hook / Shock (5s)
-    2. Main House Drama / Conflict (20s)
-    3. Voting / Danger Zone Suspense (10s)
-    4. Call to Action - Subscribe / Comment (10s)
+    2. Main House Drama / Conflict (15s)
+    3. Call to Action - Subscribe / Comment (10s)
 
     Respond ONLY in valid JSON format with two keys:
     "script": "The Telugu commentary text to be spoken",
-    "keywords": ["List", "of", "4", "English", "search", "keywords", "for", "images"]
+    "keywords": ["List", "of", "3", "English", "search", "keywords", "for", "images"]
     """
     
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=prompt,
-        config={"response_mime_type": "application/json"}
-    )
+    headers = {"Content-Type": "application/json"}
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"response_mime_type": "application/json"}
+    }
     
-    data = json.loads(response.text)
+    res = requests.post(url, headers=headers, json=payload, timeout=30)
+    res.raise_for_status()
+    
+    result = res.json()
+    text_response = result['candidates'][0]['content']['parts'][0]['text']
+    data = json.loads(text_response)
+    
     return data["script"], data["keywords"]
 
 # 2. GENERATE TELUGU VOICE
@@ -46,79 +46,62 @@ async def generate_voiceover(text, output_path="voiceover.mp3"):
     communicate = edge_tts.Communicate(text, "te-IN-MohanNeural")
     await communicate.save(output_path)
 
-# FALLBACK IMAGE GENERATOR
-def create_fallback_image(filename, text="Bigg Boss Telugu"):
-    img = Image.new("RGB", (1080, 1920), color=(20, 20, 30))
-    d = ImageDraw.Draw(img)
-    d.text((300, 960), text, fill=(255, 255, 255))
-    img.save(filename)
-
-# 3. DOWNLOAD SAFE IMAGES
-def download_and_process_images(keywords, output_dir="safe_images"):
+# 3. DOWNLOAD & PROCESS IMAGES
+def download_images(keywords, output_dir="safe_images"):
     os.makedirs(output_dir, exist_ok=True)
     processed_files = []
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+    headers = {"User-Agent": "Mozilla/5.0"}
     
-    for idx, kw in enumerate(keywords):
-        safe_path = os.path.join(output_dir, f"frame_{idx}.jpg")
+    for idx in range(3):
+        safe_path = os.path.join(output_dir, f"frame_{idx:03d}.jpg")
         url = "https://picsum.photos/1080/1920"
         
         try:
             res = requests.get(url, headers=headers, timeout=10)
             if res.status_code == 200:
-                raw_path = f"raw_{idx}.jpg"
-                with open(raw_path, "wb") as f:
+                with open("temp.jpg", "wb") as f:
                     f.write(res.content)
-                
-                img = Image.open(raw_path)
-                img = img.transpose(Image.FLIP_LEFT_RIGHT) # Anti-copyright mirror
-                img = img.resize((1080, 1920))
+                img = Image.open("temp.jpg").transpose(Image.FLIP_LEFT_RIGHT).resize((1080, 1920))
                 img.save(safe_path)
-                processed_files.append(safe_path)
-                if os.path.exists(raw_path):
-                    os.remove(raw_path)
+                os.remove("temp.jpg")
             else:
-                create_fallback_image(safe_path, kw)
-                processed_files.append(safe_path)
-        except Exception as e:
-            print(f"Image error on {kw}: {e}")
-            create_fallback_image(safe_path, kw)
-            processed_files.append(safe_path)
+                img = Image.new("RGB", (1080, 1920), color=(20, 20, 30))
+                img.save(safe_path)
+        except Exception:
+            img = Image.new("RGB", (1080, 1920), color=(20, 20, 30))
+            img.save(safe_path)
             
+        processed_files.append(safe_path)
+        
     return processed_files
 
-# 4. ASSEMBLE VIDEO
-def render_video(audio_path, image_paths, output_path="final_short.mp4"):
-    audio = AudioFileClip(audio_path)
-    duration = audio.duration
-    
-    if not image_paths:
-        raise Exception("No images available for rendering.")
-        
-    duration_per_image = duration / len(image_paths)
-    clip = ImageSequenceClip(image_paths, durations=[duration_per_image] * len(image_paths))
-    
-    if hasattr(clip, "with_audio"):
-        clip = clip.with_audio(audio)
-    else:
-        clip = clip.set_audio(audio)
-        
-    clip.write_videofile(output_path, fps=24, codec="libx264", audio_codec="aac")
+# 4. RENDER VIDEO WITH FFMPEG
+def render_video():
+    cmd = [
+        "ffmpeg", "-y",
+        "-loop", "1", "-framerate", "1/5", "-i", "safe_images/frame_%03d.jpg",
+        "-i", "voiceover.mp3",
+        "-c:v", "libx264", "-tune", "stillimage", "-c:a", "aac", "-b:a", "192k",
+        "-pix_fmt", "yuv420p",
+        "-shortest",
+        "final_short.mp4"
+    ]
+    subprocess.run(cmd, check=True)
 
-# EXECUTE PIPELINE
+# MAIN
 async def main():
-    print("Step 1: Generating Telugu Script...")
+    print("Step 1: Fetching Script from Gemini...")
     script, keywords = generate_script_and_keywords()
     
-    print("Step 2: Generating Telugu Voiceover...")
+    print("Step 2: Generating Telugu Audio...")
     await generate_voiceover(script)
     
-    print("Step 3: Downloading & Processing Safe Images...")
-    image_paths = download_and_process_images(keywords)
+    print("Step 3: Preparing Images...")
+    download_images(keywords)
     
-    print("Step 4: Rendering Final MP4 Video...")
-    render_video("voiceover.mp3", image_paths)
-    print("SUCCESS: Video generated!")
+    print("Step 4: Rendering Video...")
+    render_video()
+    print("SUCCESS: Video created!")
 
 if __name__ == "__main__":
     asyncio.run(main())
