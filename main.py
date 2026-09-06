@@ -6,13 +6,14 @@ import subprocess
 import edge_tts
 from PIL import Image, ImageDraw
 
-# 1. GENERATE TELUGU SCRIPT VIA GEMINI REST API (No SDK version issues!)
+# 1. GENERATE TELUGU SCRIPT VIA GEMINI REST API
 def generate_script_and_keywords():
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         raise ValueError("GEMINI_API_KEY secret is missing in GitHub Settings!")
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+    # Using valid gemini-1.5-flash model endpoint
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
     
     prompt = """
     You are a viral Telugu Bigg Boss reviewer. Write a 30-second high-energy dramatic commentary in Telugu script format for a YouTube Short / Reel.
@@ -46,7 +47,7 @@ async def generate_voiceover(text, output_path="voiceover.mp3"):
     communicate = edge_tts.Communicate(text, "te-IN-MohanNeural")
     await communicate.save(output_path)
 
-# 3. DOWNLOAD & PROCESS IMAGES
+# 3. DOWNLOAD & PROCESS SAFE IMAGES
 def download_images(keywords, output_dir="safe_images"):
     os.makedirs(output_dir, exist_ok=True)
     processed_files = []
@@ -88,7 +89,7 @@ def render_video():
     ]
     subprocess.run(cmd, check=True)
 
-# MAIN
+# MAIN PIPELINE
 async def main():
     print("Step 1: Fetching Script from Gemini...")
     script, keywords = generate_script_and_keywords()
