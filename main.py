@@ -6,11 +6,13 @@ import json
 from google import genai
 from PIL import Image, ImageDraw
 import edge_tts
-from moviepy import AudioFileClip, ImageSequenceClip
+from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
+from moviepy.audio.io.AudioFileClip import AudioFileClip
 
 # 1. GENERATE TELUGU SCRIPT
 def generate_script_and_keywords():
-    client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+    api_key = os.environ.get("GEMINI_API_KEY")
+    client = genai.Client(api_key=api_key) if api_key else genai.Client()
     
     prompt = """
     You are a viral Telugu Bigg Boss reviewer. Write a 45-second high-energy dramatic commentary in Telugu script format for a YouTube Short / Reel.
@@ -39,14 +41,14 @@ async def generate_voiceover(text, output_path="voiceover.mp3"):
     communicate = edge_tts.Communicate(text, "te-IN-MohanNeural")
     await communicate.save(output_path)
 
-# CREATE FALLBACK IMAGE IF DOWNLOAD FAILS
+# FALLBACK IMAGE GENERATOR
 def create_fallback_image(filename, text="Bigg Boss Telugu"):
     img = Image.new("RGB", (1080, 1920), color=(20, 20, 30))
     d = ImageDraw.Draw(img)
     d.text((300, 960), text, fill=(255, 255, 255))
     img.save(filename)
 
-# 3. DOWNLOAD & PROCESS SAFE IMAGES
+# 3. DOWNLOAD SAFE IMAGES
 def download_and_process_images(keywords, output_dir="safe_images"):
     os.makedirs(output_dir, exist_ok=True)
     processed_files = []
@@ -54,7 +56,7 @@ def download_and_process_images(keywords, output_dir="safe_images"):
     
     for idx, kw in enumerate(keywords):
         safe_path = os.path.join(output_dir, f"frame_{idx}.jpg")
-        url = f"https://picsum.photos/1080/1920"
+        url = "https://picsum.photos/1080/1920"
         
         try:
             res = requests.get(url, headers=headers, timeout=10)
@@ -80,7 +82,7 @@ def download_and_process_images(keywords, output_dir="safe_images"):
             
     return processed_files
 
-# 4. ASSEMBLE VIDEO (MoviePy 2.0 Compatibility)
+# 4. ASSEMBLE VIDEO
 def render_video(audio_path, image_paths, output_path="final_short.mp4"):
     audio = AudioFileClip(audio_path)
     duration = audio.duration
@@ -91,7 +93,6 @@ def render_video(audio_path, image_paths, output_path="final_short.mp4"):
     duration_per_image = duration / len(image_paths)
     clip = ImageSequenceClip(image_paths, durations=[duration_per_image] * len(image_paths))
     
-    # MoviePy 2.0 method update
     if hasattr(clip, "with_audio"):
         clip = clip.with_audio(audio)
     else:
