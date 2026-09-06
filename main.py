@@ -6,8 +6,13 @@ import json
 from google import genai
 from PIL import Image, ImageDraw
 import edge_tts
-from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
-from moviepy.audio.io.AudioFileClip import AudioFileClip
+
+# Safe imports for both MoviePy v1.x and v2.x
+try:
+    from moviepy.editor import AudioFileClip, ImageSequenceClip
+except ImportError:
+    from moviepy.audio.io.AudioFileClip import AudioFileClip
+    from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
 
 # 1. GENERATE TELUGU SCRIPT
 def generate_script_and_keywords():
@@ -66,7 +71,7 @@ def download_and_process_images(keywords, output_dir="safe_images"):
                     f.write(res.content)
                 
                 img = Image.open(raw_path)
-                img = img.transpose(Image.FLIP_LEFT_RIGHT)
+                img = img.transpose(Image.FLIP_LEFT_RIGHT) # Anti-copyright mirror
                 img = img.resize((1080, 1920))
                 img.save(safe_path)
                 processed_files.append(safe_path)
