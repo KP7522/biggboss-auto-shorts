@@ -13,7 +13,6 @@ def generate_script_and_keywords():
     if not api_key:
         raise ValueError("GEMINI_API_KEY secret is missing in GitHub Settings!")
 
-    # Official SDK initialization
     client = genai.Client(api_key=api_key)
     
     prompt = """
@@ -28,8 +27,9 @@ def generate_script_and_keywords():
     "keywords": ["List", "of", "3", "English", "search", "keywords", "for", "images"]
     """
     
+    # Updated model string to gemini-1.5-flash as explicitly requested by Google API error
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-1.5-flash",
         contents=prompt,
         config={"response_mime_type": "application/json"}
     )
