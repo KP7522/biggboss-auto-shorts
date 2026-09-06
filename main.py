@@ -1,40 +1,21 @@
 import os
 import asyncio
-import json
 import subprocess
 import requests
-import google.generativeai as genai
+import random
 import edge_tts
-from PIL import Image
+from PIL import Image, ImageDraw
 
-# 1. GENERATE TELUGU SCRIPT
-def generate_script_and_keywords():
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        raise ValueError("GEMINI_API_KEY secret is missing in GitHub Settings!")
+# 1. DRAMATIC TELUGU SCRIPT TEMPLATES (NO API NEEDED)
+TELUGU_SCRIPTS = [
+    "Arey rey rey! Ee vaaram Bigg Boss house lo jargindi choosthe mee mind blank aipothundi! Evaru oohinchani twist! House lo game completely maaripoyindi. Danger zone lo unna contestant evaro telusa? Instant updates kosam Subscribe cheskondi!",
+    "Bigg Boss house lo eeroju jarigina godava mamulugaledu! Housemates andaru rendu vargaalu ga maripoyaru. Nomination list lo pedda shocker ready ga undi. Ee vaaram evaru evict avtharo comment section lo cheppandi!",
+    "House lo oka vaipu master plan, inko vaipu revenge game! Ee vaaram nominations lo evaru danger zone lo unnaro telusthe shock avtharu! Audience ga mee vote evarki vesthunnaro kinda comment cheyandi. Subscribe for daily updates!"
+]
 
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-1.5-flash")
-    
-    prompt = """
-    You are a viral Telugu Bigg Boss reviewer. Write a 30-second high-energy dramatic commentary in Telugu script format for a YouTube Short / Reel.
-    Structure:
-    1. Hook / Shock (5s)
-    2. Main House Drama / Conflict (15s)
-    3. Call to Action - Subscribe / Comment (10s)
-
-    Respond ONLY in valid JSON format with two keys:
-    "script": "The Telugu commentary text to be spoken",
-    "keywords": ["List", "of", "3", "English", "search", "keywords", "for", "images"]
-    """
-    
-    response = model.generate_content(
-        prompt,
-        generation_config={"response_mime_type": "application/json"}
-    )
-    
-    data = json.loads(response.text)
-    return data["script"], data["keywords"]
+def get_script():
+    # Randomly picks a high-energy Telugu commentary script
+    return random.choice(TELUGU_SCRIPTS)
 
 # 2. GENERATE TELUGU VOICE
 async def generate_voiceover(text, output_path="voiceover.mp3"):
@@ -42,7 +23,7 @@ async def generate_voiceover(text, output_path="voiceover.mp3"):
     await communicate.save(output_path)
 
 # 3. PREPARE SAFE IMAGES
-def download_images(keywords, output_dir="safe_images"):
+def download_images(output_dir="safe_images"):
     os.makedirs(output_dir, exist_ok=True)
     processed_files = []
     headers = {"User-Agent": "Mozilla/5.0"}
@@ -86,16 +67,17 @@ def render_video():
 
 # MAIN PIPELINE
 async def main():
-    print("Step 1: Fetching Script from Gemini...")
-    script, keywords = generate_script_and_keywords()
+    print("Step 1: Fetching Telugu Script...")
+    script = get_script()
+    print(f"Script: {script[:40]}...")
     
-    print("Step 2: Generating Telugu Audio...")
+    print("Step 2: Generating Telugu Audio Voiceover...")
     await generate_voiceover(script)
     
-    print("Step 3: Preparing Images...")
-    download_images(keywords)
+    print("Step 3: Fetching Images...")
+    download_images()
     
-    print("Step 4: Rendering Video...")
+    print("Step 4: Rendering Video with FFmpeg...")
     render_video()
     print("SUCCESS: Video created!")
 
